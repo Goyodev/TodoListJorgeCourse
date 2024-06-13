@@ -1,0 +1,102 @@
+﻿@page "/virtualizetaskmanager"
+@using TodoListJorgeCourse.Contracts
+@using TodoListJorgeCourse.Models
+@inject ITaskService TaskService
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+
+<h3>Task List</h3>
+
+<EditForm Model="newTask" OnValidSubmit="AddTask">
+    <DataAnnotationsValidator />
+
+    <div>
+        <label>Título</label>
+        <InputText @bind-Value="newTask.Title" class="form-control" />
+        <ValidationMessage For="@(() => newTask.Title)" />
+    </div>
+    <div>
+        <label>Descripción</label>
+        <InputText @bind-Value="newTask.Description" class="form-control" />
+        <ValidationMessage For="@(() => newTask.Description)" />
+    </div>
+    <button type="submit" class="btn btn-primary">Añadir Tarea</button>
+</EditForm>
+
+<div style="height:400px;overflow-y:scroll">
+    <Virtualize ItemsProvider="LoadTasks" Context="task">
+        <ItemContent>
+            <div>
+                @task.Title - @task.Description - @(task.IsCompleted ? "Completada" : "En curso") - @(task.IsBlocked ? "Bloqueado" : "Desbloqueado")
+                <button @onclick="() => ToggleCompletion(task)">Toggle Completion</button>
+                <button @onclick="() => ToggleBlock(task)">Toggle Block</button>
+                <button @onclick="() => DeleteTask(task.TodoItemId)">Delete</button>
+            </div>
+        </ItemContent>
+    </Virtualize>
+</div>
+@code {
+    private List<TodoItem> tasks = new List<TodoItem>();
+    private TodoItem newTask = new TodoItem();
+    private int currentPage = 1;
+    private int pageSize = 20;
+
+    private async ValueTask<ItemsProviderResult<TodoItem>> LoadTasks(ItemsProviderRequest request)
+    {
+        int pageNumber = (request.StartIndex / request.Count) + 1;
+        tasks = await TaskService.GetTasksAsync(pageNumber, request.Count);
+        return new ItemsProviderResult<TodoItem>(tasks, this.tasks.Count);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasks();
+    }
+
+    private async Task LoadTasks()
+    {
+        var newTasks = await TaskService.GetTasksAsync(currentPage, pageSize);
+        if (newTasks.Count > 0)
+        {
+            tasks.AddRange(newTasks);
+            currentPage++;
+        }
+    }
+
+    private async Task AddTask()
+    {
+        await TaskService.AddTaskAsync(newTask);
+        newTask = new TodoItem();
+        currentPage = 1;
+        tasks.Clear();
+        await LoadTasks();
+    }
+
+    private async Task DeleteTask(int id)
+    {
+        await TaskService.DeleteTaskAsync(id);
+        currentPage = 1;
+        tasks.Clear();
+        await LoadTasks();
+    }
+
+    private async Task ToggleCompletion(TodoItem task)
+    {
+        if (!task.IsBlocked)
+        {
+            await TaskService.UpdateTaskStatusAsync(task.TodoItemId, !task.IsCompleted, task.IsBlocked);
+            currentPage = 1;
+            tasks.Clear();
+            await LoadTasks();
+        }
+    }
+
+    private async Task ToggleBlock(TodoItem task)
+    {
+        await TaskService.UpdateTaskStatusAsync(task.TodoItemId, task.IsCompleted, !task.IsBlocked);
+        currentPage = 1;
+        tasks.Clear();
+        await LoadTasks();
+    }
+}

@@ -1,0 +1,74 @@
+﻿@page "/taskmanager"
+@using TodoListJorgeCourse.Contracts
+@using TodoListJorgeCourse.Models
+@inject ITaskService TaskService
+@rendermode InteractiveServer
+
+<h3>Task List</h3>
+
+<ul>
+    @foreach (var task in tasks)
+    {
+        <li>
+            @task.Title - @task.Description - @(task.IsCompleted ? "Completed" : "In Progress")
+            <button @onclick="() => DeleteTask(task.TodoItemId)">Delete</button>
+        </li>
+    }
+</ul>
+
+<input @bind="newTask.Title" placeholder="Title" />
+<input @bind="newTask.Description" placeholder="Description" />
+<button @onclick="AddTask">Add Task</button>
+
+<button @onclick="PreviousPage" disabled="@(!canNavigateBack)">Previous</button>
+<button @onclick="NextPage" disabled="@(!canNavigateForward)">Next</button>
+
+@code {
+    private List<TodoItem> tasks = new List<TodoItem>();
+    private TodoItem newTask = new TodoItem();
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private bool canNavigateBack => currentPage > 1;
+    private bool canNavigateForward => tasks.Count == pageSize;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasks();
+    }
+
+    private async Task LoadTasks()
+    {
+        tasks = await TaskService.GetTasksAsync(currentPage, pageSize);
+    }
+
+    private async Task AddTask()
+    {
+        await TaskService.AddTaskAsync(newTask);
+        newTask = new TodoItem();
+        await LoadTasks();
+    }
+
+    private async Task DeleteTask(int id)
+    {
+        await TaskService.DeleteTaskAsync(id);
+        await LoadTasks();
+    }
+
+    private async Task PreviousPage()
+    {
+        if (canNavigateBack)
+        {
+            currentPage--;
+            await LoadTasks();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (canNavigateForward)
+        {
+            currentPage++;
+            await LoadTasks();
+        }
+    }
+}

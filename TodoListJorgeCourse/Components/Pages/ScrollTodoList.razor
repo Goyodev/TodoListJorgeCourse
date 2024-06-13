@@ -1,0 +1,134 @@
+﻿@page "/scrolltaskmanager"
+@using TodoListJorgeCourse.Contracts
+@using TodoListJorgeCourse.Helpers
+@using TodoListJorgeCourse.Models
+@inject ITaskService TaskService
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+
+<EditForm Model="newTask" OnValidSubmit="AddTask">
+    <DataAnnotationsValidator />
+
+    <div>
+        <label>Título</label>
+        <InputText @bind-Value="newTask.Title" class="form-control w-50" />
+        <ValidationMessage For="@(() => newTask.Title)" />
+    </div>
+    <div>
+        <label>Descripción</label>
+        <InputText @bind-Value="newTask.Description" class="form-control w-50" />
+        <ValidationMessage For="@(() => newTask.Description)" />
+    </div>
+    <button type="submit" class="btn btn-primary my-3">Añadir nueva Tarea</button>
+</EditForm>
+
+<h3>Lista de tareas</h3>
+
+<div>
+    <label>Estados: </label>
+    <select @onchange="FilterTasks" class="form-select w-50 mb-3">
+        <option value="">Todos</option>
+        @foreach (var state in Enum.GetValues<TaskState>())
+        {
+            <option value="@state">@state.GetDisplayName()</option>
+        }
+    </select>
+</div>
+
+<div @ref="taskListContainer" style="height: 500px; overflow-y: auto;" class="container-list container" @onscroll="CheckScroll">
+    <ul style="list-style-type:none">
+        @foreach (var task in tasks)
+        {
+            <li>
+                <div class="row border rounded border-secondary">
+                    <div class="col-md-1 col-sm-5">
+                        @task.Title - @task.Description
+                    </div>
+                    <div class="col-md-2 col-sm-5">
+
+                        <select @onchange="e => UpdateTaskState(task, e.Value)" class="btn btn-secondary mb-3">
+                            @foreach (var state in Enum.GetValues<TaskState>())
+                            {
+                                <option value="@state" selected="@(task.State == state)">
+                                    @state.GetDisplayName()
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2 col-sm-5">
+
+                        <button @onclick="() => DeleteTask(task.TodoItemId)" class="btn btn-danger">Eliminar</button>
+                    </div>
+                </div>
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    private List<TodoItem> tasks = new List<TodoItem>();
+    private TodoItem newTask = new TodoItem();
+    private TaskState? filterState = null;
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private ElementReference taskListContainer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasks();
+    }
+
+    private async Task LoadTasks()
+    {
+        var newTasks = await TaskService.GetTasksAsync(currentPage, pageSize, filterState);
+        if (newTasks.Count > 0)
+        {
+            tasks.AddRange(newTasks);
+            currentPage++;
+        }
+    }
+
+    private async Task CheckScroll()
+    {
+        bool scrolledToEnd = await JSRuntime.InvokeAsync<bool>("scrollHandler.checkIfScrolledToEnd", taskListContainer);
+        if (scrolledToEnd)
+        {
+            await LoadTasks();
+        }
+    }
+
+    private async Task AddTask()
+    {
+        await TaskService.AddTaskAsync(newTask);
+        newTask = new TodoItem();
+        currentPage = 1;
+        tasks.Clear();
+        await LoadTasks();
+    }
+
+    private async Task DeleteTask(int id)
+    {
+        await TaskService.DeleteTaskAsync(id);
+        currentPage = 1;
+        tasks.Clear();
+        await LoadTasks();
+    }
+
+    private async Task UpdateTaskState(TodoItem task, object newState)
+    {
+        if (Enum.TryParse<TaskState>(newState.ToString(), out var state))
+        {
+            await TaskService.UpdateTaskStateAsync(task.TodoItemId, state);
+            StateHasChanged();
+        }
+    }
+    private async Task FilterTasks(ChangeEventArgs e)
+    {
+        tasks = new();
+        filterState = Enum.TryParse<TaskState>(e.Value.ToString(), out var state) ? state : (TaskState?)null;
+        currentPage = 1;
+        await LoadTasks();
+        StateHasChanged();
+    }
+}
